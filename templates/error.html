@@ -1,0 +1,7 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="card empty">
+  <h1>暂时无法完成操作</h1><p role="alert">{{ message }}</p>
+  <a class="button" href="{{ url_for('index') }}">返回首页</a>
+</div>
+{% endblock %}

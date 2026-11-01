@@ -1,0 +1,16 @@
+[Unit]
+Description=Back up family health journal database
+After=local-fs.target child-health.service
+RequiresMountsFor=/data/child-health-backups
+ConditionPathExists=/var/lib/child-health/health.sqlite3
+[Service]
+Type=oneshot
+User=child-health
+Group=child-health
+UMask=0077
+ExecStart=/usr/bin/python3 /opt/child-health/backup.py
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/data/child-health-backups

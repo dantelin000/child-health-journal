@@ -1,0 +1,16 @@
+{
+  "id": "/",
+  "name": "孩子健康记录",
+  "short_name": "健康记录",
+  "description": "记录孩子的体温、症状和照护情况。",
+  "lang": "zh-CN",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f6f8f4",
+  "theme_color": "#326f5b",
+  "icons": [
+    {"src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+    {"src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}

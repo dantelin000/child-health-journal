@@ -1,0 +1,7 @@
+[Unit]
+Description=Daily family health journal database backup
+[Timer]
+OnCalendar=*-*-* 03:30:00 Australia/Melbourne
+Persistent=true
+[Install]
+WantedBy=timers.target

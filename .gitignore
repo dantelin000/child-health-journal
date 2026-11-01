@@ -1,0 +1,28 @@
+# Runtime data and secrets
+.env
+.env.*
+data/
+backups/
+records/
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+*.key
+*.pem
+*.p12
+*.pfx
+*.log
+*.bak
+
+# Local tooling
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.pytest_cache/
+.DS_Store
+._*

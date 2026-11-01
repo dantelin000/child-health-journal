@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="heading">
+  <div><div class="eyebrow">CARE JOURNAL</div><h1>健康记录</h1><p>把每一次不适、体温和照护情况记录下来。</p></div>
+  <a class="button" href="{{ url_for('record') }}">＋ 新增记录</a>
+</section>
+{% if records %}
+<div class="timeline">
+  {% for r in records %}
+  <article class="card entry">
+    <div class="entryhead">
+      <div><span class="tag">{{ r.child }}</span><h2>{{ r.occurred.replace('T', ' ') }}</h2></div>
+      <a class="edit" href="{{ url_for('record', record_id=r.id) }}">编辑</a>
+    </div>
+    <div class="grid">
+      {% for label,key in [('体温','temperature'),('症状','symptoms'),('用药','medication'),('就医与护理','care'),('备注','notes')] %}
+      {% if r[key] %}<div><h3>{{ label }}</h3><p class="pre">{{ r[key] }}</p></div>{% endif %}
+      {% endfor %}
+    </div>
+  </article>
+  {% endfor %}
+</div>
+<nav class="pagination" aria-label="记录分页">
+  {% if page > 1 %}<a class="back" href="{{ url_for('index', page=page-1) }}">← 上一页</a>{% endif %}
+  <span class="hint">第 {{ page }} 页</span>
+  {% if has_next %}<a class="back" href="{{ url_for('index', page=page+1) }}">下一页 →</a>{% endif %}
+</nav>
+<p class="hint">按墨尔本当地记录时间倒序，每页显示 50 条。</p>
+{% else %}
+<div class="card empty"><div class="icon">♡</div><h2>还没有记录</h2><p>从第一条健康记录开始，方便以后回顾。</p><a class="button" href="{{ url_for('record') }}">添加第一条记录</a></div>
+{% endif %}
+{% endblock %}

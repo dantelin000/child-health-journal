@@ -1,0 +1,20 @@
+[Unit]
+Description=Private family health journal
+After=network.target
+[Service]
+User=child-health
+Group=child-health
+WorkingDirectory=/opt/child-health
+Environment=HEALTH_DATA=/var/lib/child-health
+EnvironmentFile=-/etc/child-health/child-health.env
+ExecStartPre=/opt/child-health/venv/bin/python /opt/child-health/app.py init-db
+ExecStart=/opt/child-health/venv/bin/gunicorn --bind 127.0.0.1:18765 --workers 2 --timeout 30 --access-logfile /dev/null app:create_app()
+Restart=on-failure
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/child-health
+[Install]
+WantedBy=multi-user.target
