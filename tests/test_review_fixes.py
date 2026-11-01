@@ -174,6 +174,20 @@ class ReviewFixTests(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
         self.assertEqual(self.get("/login").status_code, 200)
 
+    def test_logout_clears_cookie_when_session_delete_fails(self):
+        self.login()
+        token = baseline.csrf(self.get("/record/new"))
+        self.app.config["DATABASE_TIMEOUT"] = 0.01
+        with closing(sqlite3.connect(self.path)) as lock:
+            lock.execute("BEGIN IMMEDIATE")
+            with self.assertLogs(self.app.logger, level="WARNING"):
+                response = self.post("/logout", {"csrf": token})
+            lock.rollback()
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.headers["Clear-Site-Data"], '"cache", "cookies", "storage"')
+        self.assertIsNone(self.client.get_cookie("__Host-health_session", domain=baseline.HOST))
+        self.assertEqual(self.get("/session-status").status_code, 401)
+
     def test_missing_database_not_implicitly_created(self):
         self.path.rename(self.path.with_suffix(".saved"))
         with self.assertLogs(self.app.logger, level="ERROR"):
