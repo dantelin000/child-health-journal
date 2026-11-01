@@ -185,7 +185,9 @@ def create_app(config=None):
     @login_required
     def logout():
         end_session()
-        return redirect(url_for("login"), code=303)
+        response = redirect(url_for("login"), code=303)
+        response.headers["Clear-Site-Data"] = '"cache", "cookies", "storage"'
+        return response
 
     @app.get("/")
     @login_required

@@ -158,11 +158,17 @@ def start_session(user):
 
 def end_session():
     sid = session.get("sid")
-    if sid:
-        connection = get_db()
-        with connection:
-            connection.execute("DELETE FROM auth_sessions WHERE token_hash=?", (token_hash(sid),))
+    # Drop the cookie first so a locked or full database cannot keep it valid.
     session.clear()
+    if sid:
+        try:
+            connection = get_db()
+            with connection:
+                connection.execute(
+                    "DELETE FROM auth_sessions WHERE token_hash=?", (token_hash(sid),)
+                )
+        except sqlite3.OperationalError:
+            current_app.logger.warning("Session revocation skipped: database unavailable")
 
 
 def set_password(username, password):
