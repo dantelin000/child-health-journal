@@ -5,22 +5,7 @@
   <a class="button" href="{{ url_for('record') }}">＋ 新增记录</a>
 </section>
 {% if records %}
-<div class="timeline">
-  {% for r in records %}
-  <article class="card entry">
-    <div class="entryhead">
-      <div><span class="tag">{{ r.member_name }}</span><h2>{{ r.occurred.replace('T', ' ') }}</h2></div>
-      <a class="edit" href="{{ url_for('record', record_id=r.id) }}">编辑</a>
-    </div>
-    <div class="grid">
-      {% for label,key in [('体温','temperature'),('症状','symptoms'),('用药','medication'),('就医与护理','care'),('备注','notes')] %}
-      {% if r[key] %}<div><h3>{{ label }}</h3><p class="pre">{{ r[key] }}</p></div>{% endif %}
-      {% endfor %}
-    </div>
-    {% if r.attachment_count %}<p class="document-summary"><a class="edit" href="{{ url_for('record', record_id=r.id) }}">📎 {{ r.attachment_count }} 个病例单 · 查看 / 下载</a></p>{% endif %}
-  </article>
-  {% endfor %}
-</div>
+{% include 'record-list.html' %}
 <nav class="pagination" aria-label="记录分页">
   {% if page > 1 %}<a class="back" href="{{ url_for('index', page=page-1) }}">← 上一页</a>{% endif %}
   <span class="hint">第 {{ page }} 页</span>

@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% block title %}历史记录 · 家庭健康记录{% endblock %}
+{% block content %}
+<section class="heading">
+  <div><div class="eyebrow">HEALTH HISTORY</div><h1>历史记录</h1><p>搜索过去的记录，或从日历里找到那一天。</p></div>
+  <a class="button" href="{{ url_for('record') }}">＋ 新增记录</a>
+</section>
+<section class="card history-search" aria-label="搜索历史记录">
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <form method="get" action="{{ url_for('history') }}">
+    <input type="hidden" name="view" value="list">
+    <div class="history-search-fields">
+      <label class="keyword-field">搜索关键词<input type="search" name="q" maxlength="200" value="{{ filters.q }}" placeholder="家人、症状、药名、备注或病例单名"></label>
+      <label>家人<select name="member"><option value="">全部家人</option>{% for m in members %}<option value="{{ m.id }}"{% if filters.member == m.id|string %} selected{% endif %}>{{ m.name }}</option>{% endfor %}</select></label>
+      <label>开始日期<input type="date" name="start" value="{{ filters.start }}"></label>
+      <label>结束日期<input type="date" name="end" value="{{ filters.end }}"></label>
+    </div>
+    <div class="history-search-actions"><button class="primary" type="submit">搜索记录</button><a class="back" href="{{ url_for('history', view=view) }}">清除筛选</a><span class="hint">搜索全部历史；日期按墨尔本当地时间。</span></div>
+  </form>
+</section>
+{% if not error %}
+<nav class="history-tabs" aria-label="历史记录查看方式">
+  <a href="{{ history_url(view='calendar', month='', day='', page=1) }}"{% if view == 'calendar' %} aria-current="page"{% endif %}>日历查看</a>
+  <a href="{{ history_url(view='list', month='', day='', page=1) }}"{% if view == 'list' %} aria-current="page"{% endif %}>列表查看</a>
+</nav>
+{% if view == 'calendar' %}
+<section class="card history-calendar" aria-label="按月查看记录">
+  <div class="calendar-toolbar">
+    <div class="calendar-month-nav">
+      {% if previous_month %}<a class="month-arrow" href="{{ history_url(month=previous_month, day='', page=1) }}" aria-label="上个月">‹</a>{% endif %}
+      <h2>{{ month_title }}</h2>
+      {% if next_month %}<a class="month-arrow" href="{{ history_url(month=next_month, day='', page=1) }}" aria-label="下个月">›</a>{% endif %}
+    </div>
+    <form method="get" action="{{ url_for('history') }}" class="month-jump">
+      <input type="hidden" name="view" value="calendar">
+      {% for key,value in filters.items() %}{% if value %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endif %}{% endfor %}
+      <label class="sr-only" for="history-month">跳转月份</label><input type="month" name="month" id="history-month" required value="{{ month }}">
+      <button class="install-button" type="submit">跳转</button>
+      <a class="back" href="{{ history_url(month=today_month, day='', page=1) }}">本月</a>
+    </form>
+  </div>
+  <p class="calendar-hint">本月 {{ month_total }} 条符合筛选的记录 · 点击日期查看当天记录</p>
+  <div class="calendar-weekdays" aria-hidden="true">{% for label in ['一','二','三','四','五','六','日'] %}<span>{{ label }}</span>{% endfor %}</div>
+  <div class="calendar-days">
+    {% for week in weeks %}{% for cell in week %}
+      {% if cell.number %}<a class="calendar-day{% if cell.count %} has-records{% endif %}{% if cell.today %} is-today{% endif %}{% if cell.selected %} is-selected{% endif %}" href="{{ history_url(day=cell.date, page=1) }}#history-results" aria-label="{{ cell.date }}，{{ cell.count }} 条记录{% if cell.selected %}，已选{% endif %}"{% if cell.today %} aria-current="date"{% endif %}>
+        <span class="day-number">{{ cell.number }}</span><span class="day-count">{% if cell.count %}{{ cell.count }} 条{% else %}<span class="sr-only">无记录</span>{% endif %}</span>
+      </a>{% else %}<span class="calendar-blank" aria-hidden="true"></span>{% endif %}
+    {% endfor %}{% endfor %}
+  </div>
+</section>
+{% endif %}
+<section class="history-results" id="history-results" aria-label="历史记录查询结果">
+  <div class="history-result-heading"><div><h2>{% if view == 'calendar' %}{{ day + ' 的记录' if day else month_title + '的记录' }}{% else %}搜索结果{% endif %}</h2><p>共 {{ total }} 条{% if records %} · 第 {{ page }} / {{ pages }} 页{% endif %}</p></div>
+  {% if day %}<a class="back" href="{{ history_url(day='', page=1) }}#history-results">查看整月</a>{% endif %}</div>
+  {% if records %}
+    {% include 'record-list.html' %}
+    <nav class="pagination" aria-label="历史记录分页">
+      {% if page > 1 %}<a class="back" href="{{ history_url(page=page-1) }}#history-results">← 上一页</a>{% endif %}
+      <span class="hint">第 {{ page }} / {{ pages }} 页</span>
+      {% if page < pages %}<a class="back" href="{{ history_url(page=page+1) }}#history-results">下一页 →</a>{% endif %}
+    </nav>
+  {% else %}
+    <div class="card empty"><div class="icon">⌕</div><h2>没有找到记录</h2><p>{% if day %}这一天没有符合筛选的记录，可以选择其他日期或查看整月。{% else %}试试调整关键词、家人或日期范围。日历只显示当前月份的记录。{% endif %}</p><a class="back" href="{{ url_for('history', view='list') }}">查看全部历史记录 →</a></div>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

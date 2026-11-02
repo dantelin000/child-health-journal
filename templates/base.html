@@ -19,6 +19,7 @@
     <div class="header-actions">
     <button type="button" class="install-button" id="install-app" hidden>安装应用</button>
     {% if g.get('user') %}
+    <a class="settings-link history-link" href="{{ url_for('history') }}"{% if request.endpoint == 'history' %} aria-current="page"{% endif %}>历史记录</a>
     <a class="settings-link" href="{{ url_for('settings') }}">设置</a>
     <form method="post" action="{{ url_for('logout') }}">
       <input type="hidden" name="csrf" value="{{ csrf() }}">

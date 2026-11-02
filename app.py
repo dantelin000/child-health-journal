@@ -37,6 +37,7 @@ from auth import (
     set_password,
     start_session,
 )
+from history import HistoryInputError, read_history
 from storage import close_db, get_db, init_db
 
 TIMEZONE = ZoneInfo("Australia/Melbourne")
@@ -236,6 +237,34 @@ def create_app(config=None):
         return render_template(
             "index.html", records=records[:PAGE_SIZE], page=page, has_next=len(records) > PAGE_SIZE
         )
+
+    @app.get("/history")
+    @login_required
+    def history():
+        try:
+            context = read_history(get_db(), request.args, datetime.now(TIMEZONE).date(), PAGE_SIZE)
+        except HistoryInputError as error:
+            return render_template(
+                "history.html",
+                error=str(error),
+                filters={key: request.args.get(key, "") for key in ("q", "member", "start", "end")},
+                view="list",
+                members=get_db()
+                .execute("SELECT id,name FROM family_members ORDER BY id")
+                .fetchall(),
+            ), 400
+        if context["page"] > context["pages"]:
+            abort(404)
+
+        def history_url(**changes):
+            state = {
+                **context["filters"],
+                **{key: context[key] for key in ("view", "month", "day", "page")},
+                **changes,
+            }
+            return url_for("history", **{key: value for key, value in state.items() if value})
+
+        return render_template("history.html", history_url=history_url, error="", **context)
 
     @app.route("/settings", methods=["GET", "POST"])
     @app.route("/settings/member/<int:member_id>/edit", methods=["GET", "POST"])
