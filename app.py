@@ -37,7 +37,7 @@ from auth import (
     set_password,
     start_session,
 )
-from history import HistoryInputError, read_history
+from history import HistoryInputError, member_colors_css, read_history
 from storage import close_db, get_db, init_db
 
 TIMEZONE = ZoneInfo("Australia/Melbourne")
@@ -237,6 +237,14 @@ def create_app(config=None):
         return render_template(
             "index.html", records=records[:PAGE_SIZE], page=page, has_next=len(records) > PAGE_SIZE
         )
+
+    @app.get("/calendar-colors.css")
+    @login_required
+    def calendar_colors():
+        ids = [row["id"] for row in get_db().execute("SELECT id FROM family_members ORDER BY id")]
+        response = make_response(member_colors_css(ids))
+        response.headers["Content-Type"] = "text/css; charset=utf-8"
+        return response
 
     @app.get("/history")
     @login_required

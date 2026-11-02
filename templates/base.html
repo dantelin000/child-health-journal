@@ -8,6 +8,7 @@
   <meta name="apple-mobile-web-app-title" content="健康记录">
   <title>{% block title %}家庭健康记录{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  {% block styles %}{% endblock %}
   <link rel="manifest" href="{{ url_for('pwa_manifest') }}">
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='icons/icon-192.png') }}">
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">

@@ -1,8 +1,105 @@
 """Read-only history search and calendar queries. Never load attachment blobs."""
 
 import calendar
+import colorsys
 import re
 from datetime import date
+
+CALENDAR_PREVIEWS = 3
+
+
+def member_color_class(member_id):
+    return f"member-color-{int(member_id)}" if member_id is not None else "member-color-legacy"
+
+
+def member_colors_css(member_ids):
+    """Only numeric selectors and generated colors; never put user text in CSS."""
+    rules = []
+    used = set()
+    for member_id in sorted(set(map(int, member_ids))):
+        base_hue = ((member_id - 1) * 137508 + 210000) % 360000
+        for offset in range(3600):
+            hue = ((base_hue + offset * 100) % 360000) / 360000
+
+            def color(lightness, saturation):
+                return "#" + "".join(
+                    f"{round(channel * 255):02x}"
+                    for channel in colorsys.hls_to_rgb(hue, lightness, saturation)
+                )
+
+            accent = color(0.36, 0.62)
+            if accent not in used:
+                break
+        used.add(accent)
+        rules.append(
+            f".{member_color_class(member_id)}{{"
+            f"--member-color:{accent};--member-bg:{color(0.94, 0.6)};"
+            f"--member-text:{color(0.26, 0.6)};}}"
+        )
+    return "\n".join(rules) + "\n"
+
+
+def record_summary(row):
+    for key, label in (
+        ("symptoms", ""),
+        ("care", ""),
+        ("medication", "用药："),
+        ("temperature", "体温 "),
+        ("notes", ""),
+    ):
+        value = " ".join((row[key] or "").split())
+        if value:
+            text = label + value
+            return text[:59] + "…" if len(text) > 60 else text
+    return f"病例单 {row['attachment_count']} 份" if row["attachment_count"] else "健康记录"
+
+
+def month_details(connection, tables, where, params):
+    """Keep previews bounded to three per day, independent of result pagination."""
+    details = {}
+    marks = connection.execute(
+        "SELECT substr(r.occurred,1,10) AS day,r.member_id,"
+        "COALESCE(m.name,r.child) AS member_name,count(*) AS count"
+        + tables
+        + where
+        + " GROUP BY day,r.member_id,COALESCE(m.name,r.child) ORDER BY day,r.member_id,member_name",
+        params,
+    )
+    for row in marks:
+        item = details.setdefault(row["day"], {"events": [], "marks": []})
+        item["marks"].append(
+            {
+                "name": row["member_name"],
+                "count": row["count"],
+                "color_class": member_color_class(row["member_id"]),
+            }
+        )
+    previews = connection.execute(
+        """SELECT p.*,(SELECT count(*) FROM attachments a WHERE a.record_id=p.id)
+        AS attachment_count FROM (
+            SELECT r.id,r.member_id,r.occurred,substr(r.occurred,1,10) AS day,
+            COALESCE(m.name,r.child) AS member_name,
+            substr(r.temperature,1,80) AS temperature,substr(r.symptoms,1,80) AS symptoms,
+            substr(r.medication,1,80) AS medication,substr(r.care,1,80) AS care,
+            substr(r.notes,1,80) AS notes,
+            row_number() OVER (PARTITION BY substr(r.occurred,1,10)
+                ORDER BY r.occurred,r.id) AS preview_rank"""
+        + tables
+        + where
+        + ") p WHERE preview_rank<=? ORDER BY occurred,id",
+        (*params, CALENDAR_PREVIEWS),
+    )
+    for row in previews:
+        details[row["day"]]["events"].append(
+            {
+                "id": row["id"],
+                "name": row["member_name"],
+                "time": row["occurred"][11:16],
+                "summary": record_summary(row),
+                "color_class": member_color_class(row["member_id"]),
+            }
+        )
+    return details
 
 
 class HistoryInputError(ValueError):
@@ -108,7 +205,7 @@ def read_history(connection, args, today, page_size=50):
     month_conditions = [*conditions, "r.occurred>=?", "r.occurred<=?"]
     month_params = [*params, month + "-01T00:00", f"{month}-{last:02d}T23:59:59"]
     month_where = " WHERE " + " AND ".join(month_conditions)
-    counts = {}
+    counts, details = {}, {}
     if view == "calendar":
         counts = dict(
             connection.execute(
@@ -119,6 +216,7 @@ def read_history(connection, args, today, page_size=50):
                 month_params,
             ).fetchall()
         )
+        details = month_details(connection, tables, month_where, month_params)
         conditions, params = month_conditions, month_params
         if selected_day:
             conditions.extend(["r.occurred>=?", "r.occurred<=?"])
@@ -146,6 +244,11 @@ def read_history(connection, args, today, page_size=50):
                     "count": counts.get(day_date, 0),
                     "today": day_date == today.isoformat(),
                     "selected": day_date == selected_day,
+                    "events": details.get(day_date, {}).get("events", []),
+                    "family_marks": details.get(day_date, {}).get("marks", [])[:4],
+                    "extra_families": max(0, len(details.get(day_date, {}).get("marks", [])) - 4),
+                    "more": max(0, counts.get(day_date, 0) - CALENDAR_PREVIEWS),
+                    "more_mobile": max(0, counts.get(day_date, 0) - 2),
                 }
             )
         weeks.append(days)
@@ -160,7 +263,14 @@ def read_history(connection, args, today, page_size=50):
         "next_month": month_shift(year, month_number, 1),
         "weeks": weeks,
         "month_total": sum(counts.values()),
-        "members": members,
+        "has_legacy_events": any(
+            mark["color_class"] == "member-color-legacy"
+            for value in details.values()
+            for mark in value["marks"]
+        ),
+        "members": [
+            {**dict(member), "color_class": member_color_class(member["id"])} for member in members
+        ],
         "records": records,
         "total": total,
         "page": page,

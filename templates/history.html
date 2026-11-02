@@ -1,11 +1,13 @@
 {% extends 'base.html' %}
 {% block title %}历史记录 · 家庭健康记录{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('calendar_colors') }}">{% endblock %}
 {% block content %}
 <section class="heading">
   <div><div class="eyebrow">HEALTH HISTORY</div><h1>历史记录</h1><p>搜索过去的记录，或从日历里找到那一天。</p></div>
   <a class="button" href="{{ url_for('record') }}">＋ 新增记录</a>
 </section>
-<section class="card history-search" aria-label="搜索历史记录">
+<details class="card history-search"{% if view == 'list' or error %} open{% endif %}>
+  <summary>搜索与筛选 <span class="hint">{% if filters.q or filters.member or filters.start or filters.end %}已启用筛选{% else %}关键词 · 家人 · 日期{% endif %}</span></summary>
   {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
   <form method="get" action="{{ url_for('history') }}">
     <input type="hidden" name="view" value="list">
@@ -17,7 +19,7 @@
     </div>
     <div class="history-search-actions"><button class="primary" type="submit">搜索记录</button><a class="back" href="{{ url_for('history', view=view) }}">清除筛选</a><span class="hint">搜索全部历史；日期按墨尔本当地时间。</span></div>
   </form>
-</section>
+</details>
 {% if not error %}
 <nav class="history-tabs" aria-label="历史记录查看方式">
   <a href="{{ history_url(view='calendar', month='', day='', page=1) }}"{% if view == 'calendar' %} aria-current="page"{% endif %}>日历查看</a>
@@ -39,13 +41,35 @@
       <a class="back" href="{{ history_url(month=today_month, day='', page=1) }}">本月</a>
     </form>
   </div>
-  <p class="calendar-hint">本月 {{ month_total }} 条符合筛选的记录 · 点击日期查看当天记录</p>
+  <div class="calendar-legend" aria-label="家人颜色图例，点击可筛选">
+    <span class="legend-label">家人</span>
+    <a class="legend-all" href="{{ history_url(member='', day='', page=1) }}"{% if not filters.member %} aria-current="true"{% endif %}>全部</a>
+    {% for m in members %}<a class="legend-member {{ m.color_class }}{% if filters.member == m.id|string %} is-active{% endif %}" href="{{ history_url(member='' if filters.member == m.id|string else m.id, day='', page=1) }}" title="{{ m.name }}：点击筛选"><span class="member-dot" aria-hidden="true"></span>{{ m.name }}</a>{% endfor %}
+    {% if has_legacy_events %}<span class="legend-member member-color-legacy"><span class="member-dot" aria-hidden="true"></span>未关联家人</span>{% endif %}
+  </div>
+  <p class="calendar-hint">本月 {{ month_total }} 条符合筛选的记录 · 点击彩色记录查看详情，点击日期查看当天全部</p>
   <div class="calendar-weekdays" aria-hidden="true">{% for label in ['一','二','三','四','五','六','日'] %}<span>{{ label }}</span>{% endfor %}</div>
   <div class="calendar-days">
     {% for week in weeks %}{% for cell in week %}
-      {% if cell.number %}<a class="calendar-day{% if cell.count %} has-records{% endif %}{% if cell.today %} is-today{% endif %}{% if cell.selected %} is-selected{% endif %}" href="{{ history_url(day=cell.date, page=1) }}#history-results" aria-label="{{ cell.date }}，{{ cell.count }} 条记录{% if cell.selected %}，已选{% endif %}"{% if cell.today %} aria-current="date"{% endif %}>
-        <span class="day-number">{{ cell.number }}</span><span class="day-count">{% if cell.count %}{{ cell.count }} 条{% else %}<span class="sr-only">无记录</span>{% endif %}</span>
-      </a>{% else %}<span class="calendar-blank" aria-hidden="true"></span>{% endif %}
+      {% if cell.number %}
+      <div class="calendar-cell{% if cell.count %} has-records{% endif %}{% if cell.today %} is-today{% endif %}{% if cell.selected %} is-selected{% endif %}">
+        <a class="calendar-date" href="{{ history_url(day=cell.date, page=1) }}#history-results" aria-label="{{ cell.date }}，{{ cell.count }} 条记录{% if cell.selected %}，已选{% endif %}"{% if cell.today %} aria-current="date"{% endif %}>
+          <span class="day-number">{{ cell.number }}</span>
+          <span class="day-family-marks" aria-hidden="true">{% for mark in cell.family_marks %}<span class="member-dot {{ mark.color_class }}" title="{{ mark.name }} · {{ mark.count }} 条"></span>{% endfor %}{% if cell.extra_families %}<span class="extra-families">+</span>{% endif %}</span>
+          {% if cell.count %}<span class="sr-only">{{ cell.count }} 条</span>{% endif %}
+        </a>
+        <div class="calendar-events">
+          {% for event in cell.events %}
+          <a class="calendar-event {{ event.color_class }}" href="{{ url_for('record', record_id=event.id) }}" title="{{ event.time }} · {{ event.name }} · {{ event.summary }}" aria-label="查看 {{ event.name }} {{ cell.date }} {{ event.time }} 的记录：{{ event.summary }}">
+            <span class="event-heading"><time class="event-time">{{ event.time }}</time><span class="event-name">{{ event.name }}</span></span>
+            <span class="event-summary">{{ event.summary }}</span>
+          </a>
+          {% endfor %}
+        </div>
+        {% if cell.more %}<a class="calendar-more more-desktop" href="{{ history_url(day=cell.date, page=1) }}#history-results">还有 {{ cell.more }} 条</a>{% endif %}
+        {% if cell.more_mobile %}<a class="calendar-more more-mobile" href="{{ history_url(day=cell.date, page=1) }}#history-results" aria-label="{{ cell.date }} 还有 {{ cell.more_mobile }} 条记录">+{{ cell.more_mobile }} 条</a>{% endif %}
+      </div>
+      {% else %}<div class="calendar-blank" aria-hidden="true"></div>{% endif %}
     {% endfor %}{% endfor %}
   </div>
 </section>
