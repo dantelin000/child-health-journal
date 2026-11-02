@@ -7,6 +7,7 @@ import re
 import secrets
 import sqlite3
 from datetime import datetime, timedelta
+from io import BytesIO
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -19,12 +20,14 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_file,
     url_for,
 )
 from werkzeug.exceptions import HTTPException, SecurityError
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from attachments import MAX_RECORD_ATTACHMENTS, MAX_UPLOAD_REQUEST, read_uploads
 from auth import (
     csrf,
     end_session,
@@ -64,7 +67,7 @@ def create_app(config=None):
         # 20,000 Unicode characters may expand to 240 KB in an HTML form.
         MAX_CONTENT_LENGTH=256 * 1024,
         MAX_FORM_MEMORY_SIZE=256 * 1024,
-        MAX_FORM_PARTS=20,
+        MAX_FORM_PARTS=30,
     )
     if config:
         app.config.update(config)
@@ -77,6 +80,16 @@ def create_app(config=None):
     # Perform the same expensive hash verification for nonexistent usernames.
     app.extensions["dummy_password"] = generate_password_hash(secrets.token_urlsafe(32))
     app.teardown_appcontext(close_db)
+
+    @app.before_request
+    def upload_limit():
+        if (
+            request.endpoint == "record"
+            and request.method == "POST"
+            and request.mimetype == "multipart/form-data"
+        ):
+            request.max_content_length = MAX_UPLOAD_REQUEST
+
     app.before_request(protect_request)
     app.jinja_env.globals["csrf"] = csrf
 
@@ -112,7 +125,7 @@ def create_app(config=None):
         if request.method != "POST" or request.endpoint != "record":
             return None
         try:
-            values = {key: request.form.get(key, "") for key in FIELDS}
+            values = {key: request.form.get(key, "") for key in (*FIELDS, "member_id")}
         except HTTPException:
             return None
         if not any(values.values()):
@@ -128,7 +141,7 @@ def create_app(config=None):
         messages = {
             400: "请求无法验证，请返回并刷新页面后重试。",
             404: "没有找到这个页面或记录。",
-            413: "提交内容过大，请缩短内容后重试。",
+            413: "提交内容过大。病例单每个最多 10 MB，每次最多 3 个，请返回表单调整后重试。",
         }
         if error.code == 400:
             preserved = preserve_submission("页面验证未通过，提交内容尚未保存。")
@@ -152,6 +165,17 @@ def create_app(config=None):
         if g.user is None:
             return jsonify(authenticated=False), 401
         return jsonify(authenticated=True, csrf=csrf())
+
+    @app.get("/family-members")
+    def family_options():
+        if g.user is None:
+            return jsonify(authenticated=False), 401
+        members = (
+            get_db()
+            .execute("SELECT id,name,relationship FROM family_members ORDER BY id")
+            .fetchall()
+        )
+        return jsonify(members=[dict(member) for member in members])
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
@@ -185,7 +209,9 @@ def create_app(config=None):
     @login_required
     def logout():
         end_session()
-        return redirect(url_for("login"), code=303)
+        response = redirect(url_for("login"), code=303)
+        response.headers["Clear-Site-Data"] = '"cache", "cookies", "storage"'
+        return response
 
     @app.get("/")
     @login_required
@@ -197,8 +223,10 @@ def create_app(config=None):
         records = (
             get_db()
             .execute(
-                """SELECT * FROM records
-            ORDER BY occurred DESC, id DESC LIMIT ? OFFSET ?""",
+                """SELECT r.*, COALESCE(m.name,r.child) AS member_name,
+                (SELECT count(*) FROM attachments a WHERE a.record_id=r.id) AS attachment_count
+                FROM records r LEFT JOIN family_members m ON m.id=r.member_id
+                ORDER BY r.occurred DESC, r.id DESC LIMIT ? OFFSET ?""",
                 (PAGE_SIZE + 1, (page - 1) * PAGE_SIZE),
             )
             .fetchall()
@@ -207,6 +235,96 @@ def create_app(config=None):
             abort(404)
         return render_template(
             "index.html", records=records[:PAGE_SIZE], page=page, has_next=len(records) > PAGE_SIZE
+        )
+
+    @app.route("/settings", methods=["GET", "POST"])
+    @app.route("/settings/member/<int:member_id>/edit", methods=["GET", "POST"])
+    @login_required
+    def settings(member_id=None):
+        connection = get_db()
+        old = (
+            connection.execute("SELECT * FROM family_members WHERE id=?", (member_id,)).fetchone()
+            if member_id is not None
+            else None
+        )
+        if member_id is not None and old is None:
+            abort(404)
+        values = dict(old) if old else {}
+        error, status = "", 200
+        if request.method == "POST":
+            values = {
+                key: request.form.get(key, "").strip()
+                for key in ("name", "relationship", "birthday", "notes", "version")
+            }
+            if not values["name"] or len(values["name"]) > 100:
+                error = "请填写家人称呼（不超过 100 字）。"
+            elif len(values["relationship"]) > 100 or len(values["notes"]) > 2000:
+                error = "关系不超过 100 字，健康备注不超过 2000 字。"
+            elif old and not re.fullmatch(r"[0-9]{1,10}", values["version"]):
+                error = "版本信息缺失，请重新打开设置。"
+            if values["birthday"]:
+                try:
+                    if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", values["birthday"]):
+                        raise ValueError
+                    birthday = datetime.strptime(values["birthday"], "%Y-%m-%d").date()
+                    if birthday > datetime.now(TIMEZONE).date():
+                        raise ValueError
+                except ValueError:
+                    error = "请填写有效的出生日期，不能晚于今天。"
+            if error:
+                status = 400
+            else:
+                data = tuple(values[key] for key in ("name", "relationship", "birthday", "notes"))
+                try:
+                    with connection:
+                        if old:
+                            result = connection.execute(
+                                """UPDATE family_members SET name=?,relationship=?,birthday=?,
+                                notes=?,version=version+1 WHERE id=? AND version=?""",
+                                (*data, member_id, int(values["version"])),
+                            )
+                            if result.rowcount == 0:
+                                error, status = "家人信息已在其他页面修改，请重新打开核对。", 409
+                        else:
+                            connection.execute(
+                                """INSERT INTO family_members(name,relationship,birthday,notes)
+                                VALUES(?,?,?,?)""",
+                                data,
+                            )
+                except sqlite3.IntegrityError:
+                    error, status = "已有相同称呼的家人，请使用不同称呼。", 400
+                if not error:
+                    return redirect(url_for("settings", saved=1), code=303)
+        members = connection.execute("SELECT * FROM family_members ORDER BY id").fetchall()
+        return render_template(
+            "settings.html",
+            members=members,
+            member=values,
+            member_id=member_id,
+            error=error,
+            today=datetime.now(TIMEZONE).strftime("%Y-%m-%d"),
+        ), status
+
+    @app.get("/record/<int:record_id>/attachment/<int:attachment_id>")
+    @login_required
+    def attachment(record_id, attachment_id):
+        file = (
+            get_db()
+            .execute(
+                "SELECT filename,content FROM attachments WHERE id=? AND record_id=?",
+                (attachment_id, record_id),
+            )
+            .fetchone()
+        )
+        if file is None:
+            abort(404)
+        return send_file(
+            BytesIO(file["content"]),
+            mimetype="application/octet-stream",
+            as_attachment=True,
+            download_name=file["filename"],
+            conditional=False,
+            etag=False,
         )
 
     @app.route("/record/new", methods=["GET", "POST"])
@@ -226,11 +344,24 @@ def create_app(config=None):
             if old
             else None
         )
+        members = get_db().execute("SELECT * FROM family_members ORDER BY id").fetchall()
+        uploads = []
         if request.method == "POST":
             values = {key: request.form.get(key, "").strip() for key in FIELDS}
             values["version"] = request.form.get("version", "")
-            if not values["child"] or len(values["child"]) > 100:
-                error = "请填写孩子称呼（不超过 100 字）。"
+            values["member_id"] = request.form.get("member_id", "")
+            member = None
+            if "member_id" in request.form:
+                member = next((m for m in members if str(m["id"]) == values["member_id"]), None)
+                if member:
+                    values["child"] = member["name"]
+                elif old and old["member_id"] is None and values["member_id"] == "legacy":
+                    values["child"] = old["child"]
+                else:
+                    error = "请选择家人；还没有家人时，请先到设置中添加。"
+            elif not values["child"] or len(values["child"]) > 100:
+                # Compatibility for forms opened before this release.
+                error = "请填写家人称呼（不超过 100 字）。"
             try:
                 if not re.fullmatch(
                     r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}", values["occurred"]
@@ -243,6 +374,10 @@ def create_app(config=None):
                 error = "每项内容不能超过 4000 字。"
             if old and not re.fullmatch(r"[0-9]{1,10}", values["version"]):
                 error = "版本信息缺失，请重新打开记录。"
+            try:
+                uploads = read_uploads(request.files.getlist("documents"))
+            except ValueError as failure:
+                error = str(failure)
             if error:
                 status = 400
             else:
@@ -250,31 +385,86 @@ def create_app(config=None):
                 data = tuple(values[key] for key in FIELDS)
                 connection = get_db()
                 with connection:
-                    if old:
-                        result = connection.execute(
-                            """UPDATE records SET child=?, occurred=?,
-                            temperature=?, symptoms=?, medication=?, care=?, notes=?, updated=?,
-                            version=version+1 WHERE id=? AND version=?""",
-                            (*data, now, record_id, int(values["version"])),
-                        )
-                        conflict = result.rowcount == 0
-                    else:
+                    connection.execute("BEGIN IMMEDIATE")
+                    if member is not None:
+                        # Read again under the write lock, so a concurrent rename is consistent.
+                        member = connection.execute(
+                            "SELECT * FROM family_members WHERE id=?", (member["id"],)
+                        ).fetchone()
+                        values["child"] = member["name"]
+                        data = tuple(values[key] for key in FIELDS)
+                    elif "member_id" not in request.form:
                         connection.execute(
-                            """INSERT INTO records(child,occurred,temperature,
-                            symptoms,medication,care,notes,created,updated)
-                            VALUES(?,?,?,?,?,?,?,?,?)""",
-                            (*data, now, now),
+                            "INSERT OR IGNORE INTO family_members(name) VALUES(?)",
+                            (values["child"],),
                         )
-                if not conflict:
+                        member = connection.execute(
+                            "SELECT * FROM family_members WHERE name=?", (values["child"],)
+                        ).fetchone()
+                    selected_id = member["id"] if member else None
+                    count = connection.execute(
+                        "SELECT count(*) FROM attachments WHERE record_id=?", (record_id,)
+                    ).fetchone()[0]
+                    if count + len(uploads) > MAX_RECORD_ATTACHMENTS:
+                        error, status = "每条记录最多保存 20 个病例单，请新建另一条记录。", 400
+                    if old:
+                        result = (
+                            connection.execute(
+                                """UPDATE records SET child=?, occurred=?,
+                            temperature=?, symptoms=?, medication=?, care=?, notes=?, updated=?,
+                            member_id=?, version=version+1 WHERE id=? AND version=?""",
+                                (*data, now, selected_id, record_id, int(values["version"])),
+                            )
+                            if not error
+                            else None
+                        )
+                        conflict = result is not None and result.rowcount == 0
+                        saved_id = record_id
+                    elif not error:
+                        result = connection.execute(
+                            """INSERT INTO records(child,occurred,temperature,
+                            symptoms,medication,care,notes,created,updated,member_id)
+                            VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                            (*data, now, now, selected_id),
+                        )
+                        saved_id = result.lastrowid
+                    if not error and not conflict:
+                        connection.executemany(
+                            """INSERT INTO attachments(record_id,filename,size,content,created)
+                            VALUES(?,?,?,?,?)""",
+                            [
+                                (saved_id, name, len(content), content, now)
+                                for name, content in uploads
+                            ],
+                        )
+                    else:
+                        connection.rollback()
+                if not conflict and not error:
                     return redirect(url_for("index"), code=303)
-                status = 409
-                error = "此记录已被其他页面修改。你的输入尚未保存，请打开最新记录核对后再填写。"
+                if conflict:
+                    status = 409
+                    error = "此记录已被其他页面修改。你的输入尚未保存，请打开最新记录核对后再填写。"
+            if any(file.filename for file in request.files.getlist("documents")):
+                error += " 病例单尚未上传，请重新选择文件。"
+        files = (
+            get_db()
+            .execute(
+                "SELECT id,filename,size FROM attachments WHERE record_id=? ORDER BY id",
+                (record_id,),
+            )
+            .fetchall()
+            if old
+            else []
+        )
         return render_template(
             "record.html",
             record=values,
             record_id=record_id,
             error=error,
             conflict=conflict,
+            members=members,
+            attachments=files,
+            legacy=bool(old and old["member_id"] is None),
             now=datetime.now(TIMEZONE).strftime("%Y-%m-%dT%H:%M"),
         ), status
 

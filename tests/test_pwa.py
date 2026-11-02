@@ -31,7 +31,7 @@ class PwaTests(unittest.TestCase):
         self.assertEqual(manifest["start_url"], "/")
         self.assertEqual(manifest["scope"], "/")
         self.assertEqual(manifest["display"], "standalone")
-        self.assertEqual(manifest["name"], "孩子健康记录")
+        self.assertEqual(manifest["name"], "家庭健康记录")
         self.assertEqual({icon["sizes"] for icon in manifest["icons"]}, {"192x192", "512x512"})
         for icon in manifest["icons"]:
             self.assertIn("maskable", icon["purpose"].split())

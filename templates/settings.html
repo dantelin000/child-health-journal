@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block title %}家人设置 · 家庭健康记录{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('index') }}">← 返回记录</a>
+<section class="heading settings-heading"><div><div class="eyebrow">FAMILY SETTINGS</div><h1>家人设置</h1><p>预先填写家人信息，记录时直接选择。此账号下的家人和记录由家庭成员共享。</p></div></section>
+{% if request.args.get('saved') == '1' %}<p class="notice" role="status">家人信息已保存。</p>{% endif %}
+<div class="settings-grid">
+  <section class="card member-list">
+    <h2>我的家人 <span class="hint">{{ members|length }} 位</span></h2>
+    {% for m in members %}
+    <article class="member-item">
+      <div class="entryhead"><h3>{{ m.name }}</h3><a class="edit" href="{{ url_for('settings', member_id=m.id) }}">编辑</a></div>
+      {% if m.relationship or m.birthday %}<p>{{ m.relationship }}{% if m.relationship and m.birthday %} · {% endif %}{{ m.birthday }}</p>{% endif %}
+      {% if m.notes %}<p class="pre">{{ m.notes }}</p>{% endif %}
+    </article>
+    {% else %}<p>还没有添加家人。在右侧或下方填写第一位家人，之后即可开始记录。</p>{% endfor %}
+    {% if member_id is not none %}<a class="button" href="{{ url_for('settings') }}">＋ 添加另一位家人</a>{% endif %}
+  </section>
+  <section class="card member-editor">
+    <h2>{{ '编辑家人' if member_id is not none else '添加家人' }}</h2>
+    {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+    {% include 'session-message.html' %}
+    <form method="post" id="record-form" data-session-url="{{ url_for('session_status') }}">
+      <input type="hidden" name="csrf" value="{{ csrf() }}">
+      {% if member_id is not none %}<input type="hidden" name="version" value="{{ member.version }}">{% endif %}
+      <label>家人称呼 <span>*</span><input name="name" required maxlength="100" value="{{ member.get('name','') }}" placeholder="例如：自己、妈妈、小宝"></label>
+      <label>与我的关系<input name="relationship" maxlength="100" value="{{ member.get('relationship','') }}" placeholder="例如：本人、母亲、女儿（选填）"></label>
+      <label>出生日期<input type="date" name="birthday" max="{{ today }}" value="{{ member.get('birthday','') }}"></label>
+      <label>健康备注<textarea name="notes" rows="4" maxlength="2000" placeholder="例如：过敏史、慢性病或其他需要留意的信息（选填）">{{ member.get('notes','') }}</textarea></label>
+      <div class="actions"><button class="primary" type="submit">保存家人</button>{% if member_id is not none %}<a class="back" href="{{ url_for('settings') }}">取消</a>{% endif %}</div>
+    </form>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='record-form.js') }}" defer></script>{% endblock %}

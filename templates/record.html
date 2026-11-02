@@ -3,24 +3,36 @@
 <a class="back" href="{{ url_for('index') }}">← 返回记录</a>
 <div class="formcard card">
   <div class="eyebrow">CARE JOURNAL</div><h1>{{ '编辑记录' if record_id is not none else '新增记录' }}</h1>
-  <p>按实际情况填写，未涉及的项目可以留空。记录时间使用墨尔本当地时间。</p>
+  <p>记录自己或家人的健康情况。未涉及的项目可以留空，时间使用墨尔本当地时间。</p>
   {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
   {% if conflict %}<p><a class="back" href="{{ url_for('record', record_id=record_id) }}" target="_blank" rel="noopener">在新页面打开最新记录</a></p>{% endif %}
-  <div class="error" id="session-message" role="alert" hidden>
-    <p id="session-message-text"></p>
-    <a id="session-login" href="{{ url_for('login') }}" target="_blank" rel="noopener" hidden>在新标签页登录，然后返回这里保存</a>
-  </div>
-  <form method="post" id="record-form" data-session-url="{{ url_for('session_status') }}">
+  {% if not members %}<p class="notice">请先到 <a href="{{ url_for('settings') }}">设置中添加家人</a>，再回来填写记录。</p>{% endif %}
+  {% include 'session-message.html' %}
+  <form method="post" enctype="multipart/form-data" id="record-form" data-session-url="{{ url_for('session_status') }}">
     <input type="hidden" name="csrf" value="{{ csrf() }}">
     {% if record_id is not none %}<input type="hidden" name="version" value="{{ record.version }}">{% endif %}
     <div class="formgrid">
-      <label>孩子称呼 <span>*</span><input name="child" maxlength="100" required value="{{ record.child if record else '' }}" placeholder="例如：小宝"></label>
+      <label>家人 <span>*</span>
+        <select name="member_id" required data-members-url="{{ url_for('family_options') }}">
+          <option value="">请选择家人</option>
+          {% if legacy %}<option value="legacy"{% if not record.member_id or record.member_id == 'legacy' %} selected{% endif %}>{{ record.child }}（原记录称呼）</option>{% endif %}
+          {% for m in members %}<option value="{{ m.id }}"{% if record and record.member_id|string == m.id|string %} selected{% endif %}>{{ m.name }}{% if m.relationship %} · {{ m.relationship }}{% endif %}</option>{% endfor %}
+        </select>
+        <a class="edit field-help" href="{{ url_for('settings') }}" target="_blank" rel="noopener">管理家人（新标签页）</a>
+      </label>
       <label>记录时间 <span>*</span><input type="datetime-local" name="occurred" required value="{{ record.occurred if record else now }}"></label>
     </div>
     <label>体温<input name="temperature" maxlength="4000" value="{{ record.temperature if record else '' }}" placeholder="例如：38.2 °C，耳温"></label>
     {% for label,key,placeholder in [('症状','symptoms','例如：咳嗽、流鼻涕，何时开始'),('用药','medication','药名、剂量、用药时间及反应'),('就医与护理','care','就诊情况、检查结果、护理措施'),('备注','notes','饮水、睡眠、精神状态或其他观察')] %}
     <label>{{ label }}<textarea name="{{ key }}" maxlength="4000" rows="3" placeholder="{{ placeholder }}">{{ record[key] if record else '' }}</textarea></label>
     {% endfor %}
+    {% if attachments %}
+    <section class="documents"><h2>已保存的病例单 <span class="hint">{{ attachments|length }} / 20</span></h2>
+      <ul class="file-list">{% for file in attachments %}<li><a href="{{ url_for('attachment', record_id=record_id, attachment_id=file.id) }}">{{ file.filename }}</a><span class="hint">{{ '%.1f'|format(file.size / 1024) }} KB · 下载</span></li>{% endfor %}</ul>
+    </section>
+    {% endif %}
+    <label>上传病例单<input type="file" name="documents" multiple accept=".pdf,.jpg,.jpeg,.png,.webp" aria-describedby="upload-help"></label>
+    <p class="hint" id="upload-help">可上传就诊单、检查报告或处方照片。支持 PDF、JPG、PNG、WebP；每个最多 10 MB，每次最多 3 个，每条记录最多 20 个。保存记录时一并上传；可再次编辑补充。</p>
     <div class="actions"><button class="primary" type="submit"{% if conflict %} disabled{% endif %}>保存记录</button><a class="back" href="{{ url_for('index') }}">取消</a></div>
   </form>
 </div>

@@ -1,12 +1,13 @@
 {% extends 'base.html' %}
-{% block title %}找回未保存内容 · 孩子健康记录{% endblock %}
+{% block title %}找回未保存内容 · 家庭健康记录{% endblock %}
 {% block content %}
 <div class="formcard card">
   <h1>未保存的内容已保留</h1>
   <p class="error" role="alert">{{ message }}</p>
+  <p>若选择了病例单，请在重新填写时重新选择文件。病例单不会自动重传。</p>
   <p>请保留本页。下方仅显示这次提交的内容，可复制到重新打开的表单；请先核对已有记录，避免重复添加。</p>
   <p><a class="button" href="{{ url_for('index') }}" target="_blank" rel="noopener">在新标签页登录或查看记录</a></p>
-  {% for label,key in [('孩子称呼','child'),('记录时间','occurred'),('体温','temperature'),('症状','symptoms'),('用药','medication'),('就医与护理','care'),('备注','notes')] %}
+  {% for label,key in [('家人称呼（旧表单）','child'),('家人编号（重新选择家人）','member_id'),('记录时间','occurred'),('体温','temperature'),('症状','symptoms'),('用药','medication'),('就医与护理','care'),('备注','notes')] %}
   <label>{{ label }}<textarea readonly rows="{{ 1 if key in ['child','occurred','temperature'] else 3 }}">{{ values[key] }}</textarea></label>
   {% endfor %}
 </div>

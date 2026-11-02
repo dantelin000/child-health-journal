@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#326f5b">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="健康记录">
-  <title>{% block title %}孩子健康记录{% endblock %}</title>
+  <title>{% block title %}家庭健康记录{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <link rel="manifest" href="{{ url_for('pwa_manifest') }}">
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='icons/icon-192.png') }}">
@@ -15,10 +15,11 @@
 </head>
 <body>
   <header><div class="wrap bar">
-    <a class="brand" href="{{ url_for('index') }}">✦ 孩子健康记录</a>
+    <a class="brand" href="{{ url_for('index') }}">✦ 家庭健康记录</a>
     <div class="header-actions">
     <button type="button" class="install-button" id="install-app" hidden>安装应用</button>
     {% if g.get('user') %}
+    <a class="settings-link" href="{{ url_for('settings') }}">设置</a>
     <form method="post" action="{{ url_for('logout') }}">
       <input type="hidden" name="csrf" value="{{ csrf() }}">
       <button class="link">退出登录</button>

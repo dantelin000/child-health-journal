@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "孩子健康记录",
+  "name": "家庭健康记录",
   "short_name": "健康记录",
-  "description": "记录孩子的体温、症状和照护情况。",
+  "description": "记录自己和家人的体温、症状、就医与照护情况。",
   "lang": "zh-CN",
   "start_url": "/",
   "scope": "/",

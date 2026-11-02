@@ -323,8 +323,9 @@ class MigrationTests(unittest.TestCase):
                     ("existing", "unchanged-hash", 5),
                 )
                 after = tuple(connection.execute("SELECT * FROM records").fetchone())
-                self.assertEqual(after[:-1], before[0])
-                self.assertEqual(after[-1], 1)
+                self.assertEqual(after[: len(before[0])], before[0])
+                self.assertEqual(after[-2], 1)
+                self.assertIsNotNone(after[-1])
 
 
 if __name__ == "__main__":

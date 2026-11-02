@@ -40,6 +40,27 @@ def init_db():
         columns = {row["name"] for row in connection.execute("PRAGMA table_info(records)")}
         if "version" not in columns:
             connection.execute("ALTER TABLE records ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
+        connection.execute("""CREATE TABLE IF NOT EXISTS family_members (
+            id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE,
+            relationship TEXT NOT NULL DEFAULT '', birthday TEXT NOT NULL DEFAULT '',
+            notes TEXT NOT NULL DEFAULT '', version INTEGER NOT NULL DEFAULT 1)""")
+        if "member_id" not in columns:
+            connection.execute(
+                "ALTER TABLE records ADD COLUMN member_id INTEGER REFERENCES family_members(id)"
+            )
+            # Run once. Names and every original record column remain intact.
+            connection.execute("""INSERT OR IGNORE INTO family_members(name)
+                SELECT DISTINCT child FROM records WHERE length(trim(child)) BETWEEN 1 AND 100""")
+            connection.execute("""UPDATE records SET member_id=(
+                SELECT id FROM family_members WHERE name=records.child)""")
+        connection.execute("""CREATE INDEX IF NOT EXISTS records_member_id
+            ON records(member_id)""")
+        connection.execute("""CREATE TABLE IF NOT EXISTS attachments (
+            id INTEGER PRIMARY KEY, record_id INTEGER NOT NULL REFERENCES records(id),
+            filename TEXT NOT NULL, size INTEGER NOT NULL CHECK(size > 0),
+            content BLOB NOT NULL CHECK(length(content)=size), created TEXT NOT NULL)""")
+        connection.execute("""CREATE INDEX IF NOT EXISTS attachments_record_id
+            ON attachments(record_id, id)""")
         connection.execute("""CREATE INDEX IF NOT EXISTS records_occurred_id
             ON records(occurred DESC, id DESC)""")
         connection.execute("""CREATE TABLE IF NOT EXISTS auth_sessions (
