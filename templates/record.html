@@ -23,7 +23,19 @@
       <label>记录时间 <span>*</span><input type="datetime-local" name="occurred" required value="{{ record.occurred if record else now }}"></label>
     </div>
     <label>体温<input name="temperature" maxlength="4000" value="{{ record.temperature if record else '' }}" placeholder="例如：38.2 °C，耳温"></label>
-    {% for label,key,placeholder in [('症状','symptoms','例如：咳嗽、流鼻涕，何时开始'),('用药','medication','药名、剂量、用药时间及反应'),('就医与护理','care','就诊情况、检查结果、护理措施'),('备注','notes','饮水、睡眠、精神状态或其他观察')] %}
+    <fieldset class="symptom-picker" aria-describedby="symptom-help">
+      <legend>症状 <span class="symptom-optional">可多选</span></legend>
+      <input type="hidden" name="symptom_picker" value="1">
+      <div class="symptom-options">
+        {% for key,icon,label in symptom_options %}
+        <label class="symptom-option"><input type="checkbox" name="symptom_choices" value="{{ key }}"{% if key in selected_symptoms %} checked{% endif %}><span class="symptom-icon" aria-hidden="true">{{ icon }}</span><span class="symptom-label">{{ label }}</span></label>
+        {% endfor %}
+      </div>
+      <p class="hint" id="symptom-help">点击选择，再点取消。选项与下方补充会一起保存；准确体温请填在上方。</p>
+      <label for="symptom-details">其他症状 / 补充说明</label>
+      <textarea id="symptom-details" name="symptoms" maxlength="4000" rows="3" placeholder="例如：何时开始、持续多久、咳嗽频率；也可以直接填写其他症状">{{ symptom_details }}</textarea>
+    </fieldset>
+    {% for label,key,placeholder in [('用药','medication','药名、剂量、用药时间及反应'),('就医与护理','care','就诊情况、检查结果、护理措施'),('备注','notes','饮水、睡眠、精神状态或其他观察')] %}
     <label>{{ label }}<textarea name="{{ key }}" maxlength="4000" rows="3" placeholder="{{ placeholder }}">{{ record[key] if record else '' }}</textarea></label>
     {% endfor %}
     {% if attachments %}

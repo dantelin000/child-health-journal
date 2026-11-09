@@ -43,6 +43,35 @@ from storage import close_db, get_db, init_db
 TIMEZONE = ZoneInfo("Australia/Melbourne")
 FIELDS = ("child", "occurred", "temperature", "symptoms", "medication", "care", "notes")
 PAGE_SIZE = 50
+SYMPTOM_OPTIONS = (
+    ("low_fever", "🌡️", "低烧"),
+    ("fever_38", "🌡️", "发热 38°C"),
+    ("fever_39", "🔥", "高烧 39°C"),
+    ("vomiting", "🤮", "呕吐"),
+    ("runny_nose", "🤧", "流鼻涕"),
+    ("cough", "😷", "咳嗽"),
+)
+
+
+def submitted_symptoms(form):
+    """Keep the existing text storage and accept forms opened before this update."""
+    details = form.get("symptoms", "").strip()
+    if form.get("symptom_picker") != "1":
+        return details
+    selected = set(form.getlist("symptom_choices"))
+    summary = "、".join(label for key, _, label in SYMPTOM_OPTIONS if key in selected)
+    return "\n".join(part for part in (summary, details) if part)
+
+
+def split_symptoms(value):
+    """Only recognize a whole first line of known labels; preserve all other text."""
+    first, separator, details = value.partition("\n")
+    labels = first.split("、")
+    known = {label: key for key, _, label in SYMPTOM_OPTIONS}
+    if labels and all(label in known for label in labels):
+        return {known[label] for label in labels}, details if separator else ""
+    return set(), value
+
 
 
 def create_app(config=None):
@@ -127,6 +156,7 @@ def create_app(config=None):
             return None
         try:
             values = {key: request.form.get(key, "") for key in (*FIELDS, "member_id")}
+            values["symptoms"] = submitted_symptoms(request.form)
         except HTTPException:
             return None
         if not any(values.values()):
@@ -385,6 +415,7 @@ def create_app(config=None):
         uploads = []
         if request.method == "POST":
             values = {key: request.form.get(key, "").strip() for key in FIELDS}
+            values["symptoms"] = submitted_symptoms(request.form)
             values["version"] = request.form.get("version", "")
             values["member_id"] = request.form.get("member_id", "")
             member = None
@@ -493,8 +524,12 @@ def create_app(config=None):
             if old
             else []
         )
+        selected_symptoms, symptom_details = split_symptoms(values["symptoms"] if values else "")
         return render_template(
             "record.html",
+            symptom_options=SYMPTOM_OPTIONS,
+            selected_symptoms=selected_symptoms,
+            symptom_details=symptom_details,
             record=values,
             record_id=record_id,
             error=error,
