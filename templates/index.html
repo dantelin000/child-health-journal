@@ -2,7 +2,7 @@
 {% block content %}
 <section class="heading">
   <div><div class="eyebrow">CARE JOURNAL</div><h1>健康记录</h1><p>为自己和家人，留下每一次健康与照护记录。</p></div>
-  <a class="button" href="{{ url_for('record') }}">＋ 新增记录</a>
+  <div class="record-actions"><a class="button" href="{{ url_for('record') }}">＋ 新增记录</a>{% if records %}<a class="copy-button" href="{{ url_for('record', copy='last') }}">⧉ 复制上一条</a>{% endif %}</div>
 </section>
 {% if records %}
 {% include 'record-list.html' %}

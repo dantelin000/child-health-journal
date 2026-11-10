@@ -3,7 +3,7 @@
   <article class="card entry">
     <div class="entryhead">
       <div><span class="tag{% if request.endpoint == 'history' %} member-color-{{ r.member_id if r.member_id is not none else 'legacy' }}{% endif %}">{{ r.member_name }}</span><h2>{{ r.occurred.replace('T', ' ') }}</h2></div>
-      <a class="edit" href="{{ url_for('record', record_id=r.id) }}">编辑</a>
+      <div class="entry-actions"><a class="edit" href="{{ url_for('record', copy=r.id) }}">复制</a><a class="edit" href="{{ url_for('record', record_id=r.id) }}">编辑</a></div>
     </div>
     <div class="grid">
       {% for label,key in [('体温','temperature'),('症状','symptoms'),('用药','medication'),('就医与护理','care'),('备注','notes')] %}

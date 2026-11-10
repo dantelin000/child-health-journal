@@ -412,6 +412,22 @@ def create_app(config=None):
             else None
         )
         members = get_db().execute("SELECT * FROM family_members ORDER BY id").fetchall()
+        copy_mode = record_id is None and request.args.get("copy") is not None
+        if copy_mode and request.method == "GET":
+            copy_id = request.args.get("copy", "")
+            if copy_id == "last":
+                source = get_db().execute(
+                    "SELECT * FROM records ORDER BY occurred DESC, id DESC LIMIT 1"
+                ).fetchone()
+            elif re.fullmatch(r"[1-9][0-9]{0,9}", copy_id):
+                source = get_db().execute("SELECT * FROM records WHERE id=?", (int(copy_id),)).fetchone()
+            else:
+                abort(404)
+            if source is None:
+                abort(404)
+            values = {key: source[key] or "" for key in FIELDS}
+            values["member_id"] = source["member_id"] or ""
+            values["occurred"] = datetime.now(TIMEZONE).strftime("%Y-%m-%dT%H:%M")
         uploads = []
         if request.method == "POST":
             values = {key: request.form.get(key, "").strip() for key in FIELDS}
@@ -527,6 +543,8 @@ def create_app(config=None):
         selected_symptoms, symptom_details = split_symptoms(values["symptoms"] if values else "")
         return render_template(
             "record.html",
+            copy_mode=copy_mode,
+            has_records=bool(get_db().execute("SELECT 1 FROM records LIMIT 1").fetchone()),
             symptom_options=SYMPTOM_OPTIONS,
             selected_symptoms=selected_symptoms,
             symptom_details=symptom_details,

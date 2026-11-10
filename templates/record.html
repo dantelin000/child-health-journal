@@ -2,8 +2,9 @@
 {% block content %}
 <a class="back" href="{{ url_for('index') }}">← 返回记录</a>
 <div class="formcard card">
-  <div class="eyebrow">CARE JOURNAL</div><h1>{{ '编辑记录' if record_id is not none else '新增记录' }}</h1>
+  <div class="eyebrow">CARE JOURNAL</div><h1>{{ '编辑记录' if record_id is not none else ('检查并保存新记录' if copy_mode else '新增记录') }}</h1>
   <p>记录自己或家人的健康情况。未涉及的项目可以留空，时间使用墨尔本当地时间。</p>
+  {% if copy_mode %}<p class="notice">已带入上一条记录的家人和文字内容，时间设为现在。请检查并修改，尤其是体温和用药；病例单不会复制。点击保存后才会新增记录。</p>{% elif record_id is none and has_records %}<p><a class="copy-button" href="{{ url_for('record', copy='last') }}" target="_blank" rel="noopener">⧉ 复制上一条（新标签页检查）</a></p>{% endif %}
   {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
   {% if conflict %}<p><a class="back" href="{{ url_for('record', record_id=record_id) }}" target="_blank" rel="noopener">在新页面打开最新记录</a></p>{% endif %}
   {% if not members %}<p class="notice">请先到 <a href="{{ url_for('settings') }}">设置中添加家人</a>，再回来填写记录。</p>{% endif %}
