@@ -24,7 +24,20 @@
       <label>记录时间 <span>*</span><input type="datetime-local" name="occurred" required value="{{ record.occurred if record else now }}"></label>
     </div>
     <label>体温<input name="temperature" maxlength="4000" value="{{ record.temperature if record else '' }}" placeholder="例如：38.2 °C，耳温"></label>
-    <label>睡眠时间<input name="sleep_time" maxlength="4000" value="{{ record.sleep_time if record else '' }}" placeholder="例如：21:30–07:00，夜醒两次"></label>
+    <fieldset class="sleep-picker">
+      <legend>🌙 睡眠时间 <span class="symptom-optional">可留空</span></legend>
+      <input type="hidden" name="sleep_picker" value="1">
+      {% if sleep_legacy %}
+      <p class="notice">原有睡眠记录：<span class="pre">{{ sleep_legacy }}</span></p>
+      <input type="hidden" name="sleep_legacy" value="{{ sleep_legacy }}">
+      <label class="sleep-replace"><input type="checkbox" name="replace_sleep" value="1"{% if replace_sleep %} checked{% endif %}> 用下面选择的时间替换原有睡眠记录</label>
+      {% endif %}
+      <div class="formgrid sleep-clocks">
+        <label>入睡时间<input type="time" name="sleep_start" step="60" value="{{ sleep_start }}"></label>
+        <label>醒来时间<input type="time" name="sleep_end" step="60" value="{{ sleep_end }}"></label>
+      </div>
+      <p class="hint">入睡和醒来时间均可单独填写或留空。跨过午夜时，醒来时间表示次日。其他睡眠情况可写在备注中。</p>
+    </fieldset>
     <fieldset class="symptom-picker" aria-describedby="symptom-help">
       <legend>症状 <span class="symptom-optional">可多选</span></legend>
       <input type="hidden" name="symptom_picker" value="1">

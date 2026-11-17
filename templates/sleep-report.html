@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block title %}睡眠统计 · 家庭健康记录{% endblock %}
+{% block content %}
+<section class="heading"><div><div class="eyebrow">SLEEP REPORT</div><h1>睡眠统计</h1><p>查看家人在不同日期的入睡时间。</p></div><a class="button" href="{{ url_for('record') }}">＋ 新增记录</a></section>
+<form class="card history-search" method="get" action="{{ url_for('sleep_report') }}">
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <div class="sleep-filters">
+    <label>家人<select name="member"><option value="">全部家人</option>{% for m in members %}<option value="{{ m.id }}"{% if filters.member == m.id|string %} selected{% endif %}>{{ m.name }}</option>{% endfor %}</select></label>
+    <label>开始日期<input type="date" name="start" value="{{ filters.start }}"></label>
+    <label>结束日期<input type="date" name="end" value="{{ filters.end }}"></label>
+  </div><div class="history-search-actions"><button class="primary" type="submit">查看统计</button><a class="back" href="{{ url_for('sleep_report') }}">最近 30 天</a></div>
+</form>
+{% if not error %}
+<div class="sleep-summary"><div><strong>{{ total }}</strong><span>条睡眠记录</span></div><div><strong>{% if average is not none %}{{ average // 60 }} 小时 {{ average % 60 }} 分{% else %}—{% endif %}</strong><span>平均时长 · {{ counted }} 条可计算</span></div></div>
+<p class="hint">日期是填写的记录日期。时长按钟面时间估算，醒来时间早于入睡时间时按次日计算；相同时间及旧文字记录不计算时长。夜间醒来时间、夏令时变化未扣除。</p>
+<div class="card sleep-table-wrap"><table class="sleep-table"><thead><tr><th>记录日期</th><th>家人</th><th>🌙 入睡时间</th><th>醒来时间</th><th>估算时长</th><th>原有内容</th></tr></thead><tbody>
+{% for row in rows %}<tr><td><a class="edit" href="{{ url_for('record', record_id=row.id) }}">{{ row.date }}</a></td><td>{{ row.member }}</td><td><strong>{{ row.start or '—' }}</strong></td><td>{{ row.end or '—' }}</td><td>{% if row.duration is not none %}{{ row.duration // 60 }} 小时 {{ row.duration % 60 }} 分{% else %}—{% endif %}</td><td class="pre">{{ row.legacy or '—' }}</td></tr>{% else %}<tr><td colspan="6">没有符合条件的睡眠记录。</td></tr>{% endfor %}
+</tbody></table></div>
+<nav class="pagination" aria-label="睡眠统计分页">{% if page > 1 %}<a class="back" href="{{ url_for('sleep_report', member=filters.member, start=filters.start, end=filters.end, page=page-1) }}">← 上一页</a>{% endif %}<span class="hint">第 {{ page }} / {{ pages }} 页</span>{% if page < pages %}<a class="back" href="{{ url_for('sleep_report', member=filters.member, start=filters.start, end=filters.end, page=page+1) }}">下一页 →</a>{% endif %}</nav>
+{% endif %}
+{% endblock %}

@@ -37,7 +37,7 @@ from auth import (
     set_password,
     start_session,
 )
-from history import HistoryInputError, member_colors_css, read_history
+from history import HistoryInputError, member_colors_css, parse_date, read_history
 from storage import close_db, get_db, init_db
 
 TIMEZONE = ZoneInfo("Australia/Melbourne")
@@ -72,6 +72,46 @@ def split_symptoms(value):
         return {known[label] for label in labels}, details if separator else ""
     return set(), value
 
+
+
+SLEEP_RANGE = re.compile(r"^([01][0-9]|2[0-3]):[0-5][0-9]–([01][0-9]|2[0-3]):[0-5][0-9]$")
+SLEEP_CLOCK = re.compile(r"^([01][0-9]|2[0-3]):[0-5][0-9]$")
+
+
+def sleep_form_value(form):
+    """Assemble optional clocks without discarding older free-text entries."""
+    legacy = form.get("sleep_legacy", "").strip()
+    start, end = form.get("sleep_start", ""), form.get("sleep_end", "")
+    if legacy and form.get("replace_sleep") != "1":
+        return legacy, ""
+    if (start and not SLEEP_CLOCK.fullmatch(start)) or (end and not SLEEP_CLOCK.fullmatch(end)):
+        return "", "请选择有效的入睡或醒来时间。"
+    if start and end:
+        return f"{start}–{end}", ""
+    if start:
+        return f"入睡 {start}", ""
+    if end:
+        return f"醒来 {end}", ""
+    return "", ""
+
+
+def sleep_inputs(value):
+    if SLEEP_RANGE.fullmatch(value):
+        start, end = value.split("–")
+        return start, end, ""
+    if value.startswith("入睡 ") and SLEEP_CLOCK.fullmatch(value[3:]):
+        return value[3:], "", ""
+    if value.startswith("醒来 ") and SLEEP_CLOCK.fullmatch(value[3:]):
+        return "", value[3:], ""
+    return "", "", value
+
+
+def sleep_minutes(start, end):
+    if not start or not end or start == end:
+        return None
+    sh, sm = map(int, start.split(":"))
+    eh, em = map(int, end.split(":"))
+    return (eh * 60 + em - sh * 60 - sm) % (24 * 60)
 
 
 def create_app(config=None):
@@ -157,6 +197,9 @@ def create_app(config=None):
         try:
             values = {key: request.form.get(key, "") for key in (*FIELDS, "member_id")}
             values["symptoms"] = submitted_symptoms(request.form)
+            if request.form.get("sleep_picker") == "1":
+                value, error = sleep_form_value(request.form)
+                values["sleep_time"] = value or ("入睡：" + request.form.get("sleep_start", "") + "；醒来：" + request.form.get("sleep_end", "") if error else "")
         except HTTPException:
             return None
         if not any(values.values()):
@@ -267,6 +310,63 @@ def create_app(config=None):
         return render_template(
             "index.html", records=records[:PAGE_SIZE], page=page, has_next=len(records) > PAGE_SIZE
         )
+
+    @app.get("/sleep-report")
+    @login_required
+    def sleep_report():
+        members = get_db().execute("SELECT id,name FROM family_members ORDER BY id").fetchall()
+        today = datetime.now(TIMEZONE).date()
+        defaults = {"start": (today - timedelta(days=29)).isoformat(), "end": today.isoformat(), "member": ""}
+        filters = {key: request.args.get(key, defaults[key] if not request.args else "").strip() for key in defaults}
+        page_text = request.args.get("page", "1")
+        error = ""
+        try:
+            if filters["start"]:
+                parse_date(filters["start"], "开始日期")
+            if filters["end"]:
+                parse_date(filters["end"], "结束日期")
+            if filters["start"] and filters["end"] and filters["start"] > filters["end"]:
+                raise HistoryInputError("开始日期不能晚于结束日期。")
+            if filters["member"] and (not re.fullmatch(r"[0-9]{1,19}", filters["member"]) or
+                int(filters["member"]) not in {m["id"] for m in members}):
+                raise HistoryInputError("没有找到所选家人，请重新选择。")
+            if not re.fullmatch(r"[0-9]{1,6}", page_text) or int(page_text) < 1:
+                raise HistoryInputError("页码无效。")
+        except HistoryInputError as failure:
+            error = str(failure)
+        page, pages, total, counted, minutes, rows = 1, 1, 0, 0, 0, []
+        if not error:
+            page = int(page_text)
+            conditions = ["r.sleep_time IS NOT NULL", "length(trim(r.sleep_time)) > 0"]
+            params = []
+            if filters["member"]:
+                conditions.append("r.member_id=?")
+                params.append(int(filters["member"]))
+            if filters["start"]:
+                conditions.append("r.occurred>=?")
+                params.append(filters["start"] + "T00:00")
+            if filters["end"]:
+                conditions.append("r.occurred<=?")
+                params.append(filters["end"] + "T23:59:59")
+            tables = " FROM records r LEFT JOIN family_members m ON m.id=r.member_id WHERE " + " AND ".join(conditions)
+            for row in get_db().execute("SELECT r.sleep_time" + tables, params):
+                start, end, legacy = sleep_inputs(row["sleep_time"])
+                duration = sleep_minutes(start, end) if not legacy else None
+                total += 1
+                if duration is not None:
+                    counted += 1
+                    minutes += duration
+            pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
+            raw = get_db().execute("SELECT r.id,r.occurred,r.sleep_time,COALESCE(m.name,r.child) AS member_name" + tables +
+                " ORDER BY r.occurred DESC,r.id DESC LIMIT ? OFFSET ?", (*params, PAGE_SIZE, (page - 1) * PAGE_SIZE)).fetchall()
+            for row in raw:
+                start, end, legacy = sleep_inputs(row["sleep_time"])
+                duration = sleep_minutes(start, end) if not legacy else None
+                rows.append({"id": row["id"], "date": row["occurred"][:10], "member": row["member_name"],
+                    "start": start, "end": end, "legacy": legacy, "duration": duration})
+        return render_template("sleep-report.html", members=members, filters=filters, error=error,
+            rows=rows, page=page, pages=pages, total=total, counted=counted,
+            average=round(minutes / counted) if counted else None)
 
     @app.get("/calendar-colors.css")
     @login_required
@@ -432,7 +532,10 @@ def create_app(config=None):
         if request.method == "POST":
             values = {key: request.form.get(key, "").strip() for key in FIELDS}
             values["symptoms"] = submitted_symptoms(request.form)
-            if old and "sleep_time" not in request.form:
+            sleep_error = ""
+            if request.form.get("sleep_picker") == "1":
+                values["sleep_time"], sleep_error = sleep_form_value(request.form)
+            if old and "sleep_time" not in request.form and request.form.get("sleep_picker") != "1":
                 values["sleep_time"] = old["sleep_time"] or ""
             values["version"] = request.form.get("version", "")
             values["member_id"] = request.form.get("member_id", "")
@@ -456,6 +559,8 @@ def create_app(config=None):
                 datetime.strptime(values["occurred"], "%Y-%m-%dT%H:%M")
             except ValueError:
                 error = "请填写有效的记录时间。"
+            if sleep_error:
+                error = sleep_error
             if any(len(values[key]) > 4000 for key in FIELDS[2:]):
                 error = "每项内容不能超过 4000 字。"
             if old and not re.fullmatch(r"[0-9]{1,10}", values["version"]):
@@ -543,9 +648,18 @@ def create_app(config=None):
             else []
         )
         selected_symptoms, symptom_details = split_symptoms(values["symptoms"] if values else "")
+        sleep_start, sleep_end, sleep_legacy = sleep_inputs(values["sleep_time"] if values else "")
+        replace_sleep = False
+        if request.method == "POST" and request.form.get("sleep_picker") == "1":
+            sleep_start = request.form.get("sleep_start", "")
+            sleep_end = request.form.get("sleep_end", "")
+            sleep_legacy = request.form.get("sleep_legacy", "")
+            replace_sleep = request.form.get("replace_sleep") == "1"
         return render_template(
             "record.html",
             copy_mode=copy_mode,
+            sleep_start=sleep_start, sleep_end=sleep_end,
+            sleep_legacy=sleep_legacy, replace_sleep=replace_sleep,
             has_records=bool(get_db().execute("SELECT 1 FROM records LIMIT 1").fetchone()),
             symptom_options=SYMPTOM_OPTIONS,
             selected_symptoms=selected_symptoms,
