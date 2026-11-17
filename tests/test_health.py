@@ -324,8 +324,9 @@ class MigrationTests(unittest.TestCase):
                 )
                 after = tuple(connection.execute("SELECT * FROM records").fetchone())
                 self.assertEqual(after[: len(before[0])], before[0])
-                self.assertEqual(after[-2], 1)
-                self.assertIsNotNone(after[-1])
+                self.assertEqual(after[-3], 1)
+                self.assertIsNone(after[-2])  # sleep_time
+                self.assertIsNotNone(after[-1])  # member_id
 
 
 if __name__ == "__main__":

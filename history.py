@@ -167,6 +167,7 @@ def read_history(connection, args, today, page_size=50):
             "m.relationship",
             "r.child",
             "r.temperature",
+            "r.sleep_time",
             "r.symptoms",
             "r.medication",
             "r.care",

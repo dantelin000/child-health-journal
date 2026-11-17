@@ -41,7 +41,7 @@ from history import HistoryInputError, member_colors_css, read_history
 from storage import close_db, get_db, init_db
 
 TIMEZONE = ZoneInfo("Australia/Melbourne")
-FIELDS = ("child", "occurred", "temperature", "symptoms", "medication", "care", "notes")
+FIELDS = ("child", "occurred", "temperature", "symptoms", "medication", "care", "notes", "sleep_time")
 PAGE_SIZE = 50
 SYMPTOM_OPTIONS = (
     ("low_fever", "🌡️", "低烧"),
@@ -432,6 +432,8 @@ def create_app(config=None):
         if request.method == "POST":
             values = {key: request.form.get(key, "").strip() for key in FIELDS}
             values["symptoms"] = submitted_symptoms(request.form)
+            if old and "sleep_time" not in request.form:
+                values["sleep_time"] = old["sleep_time"] or ""
             values["version"] = request.form.get("version", "")
             values["member_id"] = request.form.get("member_id", "")
             member = None
@@ -495,7 +497,7 @@ def create_app(config=None):
                         result = (
                             connection.execute(
                                 """UPDATE records SET child=?, occurred=?,
-                            temperature=?, symptoms=?, medication=?, care=?, notes=?, updated=?,
+                            temperature=?, symptoms=?, medication=?, care=?, notes=?, sleep_time=?, updated=?,
                             member_id=?, version=version+1 WHERE id=? AND version=?""",
                                 (*data, now, selected_id, record_id, int(values["version"])),
                             )
@@ -507,8 +509,8 @@ def create_app(config=None):
                     elif not error:
                         result = connection.execute(
                             """INSERT INTO records(child,occurred,temperature,
-                            symptoms,medication,care,notes,created,updated,member_id)
-                            VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                            symptoms,medication,care,notes,sleep_time,created,updated,member_id)
+                            VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
                             (*data, now, now, selected_id),
                         )
                         saved_id = result.lastrowid

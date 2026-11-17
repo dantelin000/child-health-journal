@@ -318,8 +318,8 @@ class FamilyTests(unittest.TestCase):
             init_db()
             init_db()
             after = [tuple(row) for row in connection.execute("SELECT * FROM records ORDER BY id")]
-            self.assertEqual([row[:-1] for row in after], before)
-            self.assertEqual([row[-1] for row in after], [1, 1])
+            self.assertEqual([row[:-2] for row in after], before)
+            self.assertEqual([row[-2:] for row in after], [(None, 1), (None, 1)])
             self.assertEqual(
                 connection.execute("SELECT count(*) FROM family_members").fetchone()[0], 1
             )

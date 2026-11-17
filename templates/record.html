@@ -24,6 +24,7 @@
       <label>记录时间 <span>*</span><input type="datetime-local" name="occurred" required value="{{ record.occurred if record else now }}"></label>
     </div>
     <label>体温<input name="temperature" maxlength="4000" value="{{ record.temperature if record else '' }}" placeholder="例如：38.2 °C，耳温"></label>
+    <label>睡眠时间<input name="sleep_time" maxlength="4000" value="{{ record.sleep_time if record else '' }}" placeholder="例如：21:30–07:00，夜醒两次"></label>
     <fieldset class="symptom-picker" aria-describedby="symptom-help">
       <legend>症状 <span class="symptom-optional">可多选</span></legend>
       <input type="hidden" name="symptom_picker" value="1">

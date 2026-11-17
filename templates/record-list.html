@@ -6,7 +6,7 @@
       <div class="entry-actions"><a class="edit" href="{{ url_for('record', copy=r.id) }}">复制</a><a class="edit" href="{{ url_for('record', record_id=r.id) }}">编辑</a></div>
     </div>
     <div class="grid">
-      {% for label,key in [('体温','temperature'),('症状','symptoms'),('用药','medication'),('就医与护理','care'),('备注','notes')] %}
+      {% for label,key in [('体温','temperature'),('睡眠时间','sleep_time'),('症状','symptoms'),('用药','medication'),('就医与护理','care'),('备注','notes')] %}
       {% if r[key] %}<div><h3>{{ label }}</h3><p class="pre">{{ r[key] }}</p></div>{% endif %}
       {% endfor %}
     </div>

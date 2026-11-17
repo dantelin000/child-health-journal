@@ -40,6 +40,8 @@ def init_db():
         columns = {row["name"] for row in connection.execute("PRAGMA table_info(records)")}
         if "version" not in columns:
             connection.execute("ALTER TABLE records ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
+        if "sleep_time" not in columns:
+            connection.execute("ALTER TABLE records ADD COLUMN sleep_time TEXT")
         connection.execute("""CREATE TABLE IF NOT EXISTS family_members (
             id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE,
             relationship TEXT NOT NULL DEFAULT '', birthday TEXT NOT NULL DEFAULT '',
